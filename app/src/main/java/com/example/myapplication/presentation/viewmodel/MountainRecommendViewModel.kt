@@ -2,17 +2,21 @@ package com.example.myapplication.presentation.viewmodel
 
 import android.annotation.SuppressLint
 import android.content.Context
+import android.location.Geocoder
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.android.gms.location.LocationServices
 import com.example.myapplication.data.repository.MountainRepositoryImpl
-import com.example.myapplication.data.source.local.StaticMountainLocalDataSource
+import com.example.myapplication.data.source.remote.OverpassRemoteDataSource
 import com.example.myapplication.domain.model.Mountain
 import com.example.myapplication.domain.usecase.GetRecommendedMountainsUseCase
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.util.Locale
 
 /**
  * 주변 산 추천 화면의 UI 상태와 비즈니스 로직(위치 측정 제어)을 조율하는 ViewModel입니다.
@@ -24,7 +28,7 @@ class MountainRecommendViewModel(
     // 수동 생성을 간편히 하기 위해 보조 생성자(Factory 대용)를 제공하여 편리한 인스턴스 생성을 지원합니다.
     constructor() : this(
         GetRecommendedMountainsUseCase(
-            MountainRepositoryImpl(StaticMountainLocalDataSource())
+            MountainRepositoryImpl(OverpassRemoteDataSource())
         )
     )
 
@@ -46,10 +50,10 @@ class MountainRecommendViewModel(
         fusedLocationClient.lastLocation
             .addOnSuccessListener { location ->
                 if (location != null) {
-                    loadRecommendations(location.latitude, location.longitude)
+                    loadRecommendations(context, location.latitude, location.longitude)
                 } else {
-                    // 일시적으로 GPS 좌표 수집이 실패한 경우 서울 중심 좌표(서울시청 부근)를 기본 기본값으로 사용합니다.
-                    loadRecommendations(37.5665, 126.9780)
+                    // 일시적으로 GPS 좌표 수집이 실패한 경우 서울 중심 좌표(서울시청 부근)를 기본값으로 사용합니다.
+                    loadRecommendations(context, 37.5665, 126.9780)
                 }
             }
             .addOnFailureListener { error ->
@@ -58,13 +62,42 @@ class MountainRecommendViewModel(
     }
 
     /**
-     * 도출된 위/경도 수치를 UseCase에 투입하여 정밀 추천 목록 State를 반영합니다.
+     * 도출된 위/경도 수치와 컨텍스트를 활용해 Geocoder 역지오코딩을 수행하고 UseCase를 호출합니다.
      */
-    private fun loadRecommendations(latitude: Double, longitude: Double) {
+    private fun loadRecommendations(context: Context, latitude: Double, longitude: Double) {
         viewModelScope.launch {
             try {
+                // 백그라운드 IO 스레드에서 안드로이드 Geocoder 역지오코딩을 수행해 한글 주소를 가져옵니다.
+                val addressName = withContext(Dispatchers.IO) {
+                    try {
+                        val geocoder = Geocoder(context, Locale.KOREA)
+                        val addressList = geocoder.getFromLocation(latitude, longitude, 1)
+                        if (!addressList.isNullOrEmpty()) {
+                            val address = addressList[0]
+                            val admin = address.adminArea ?: "" // 특별/광역시/도 (예: 서울특별시)
+                            val locality = address.locality ?: "" // 구/군 (예: 서대문구)
+                            val subLocality = address.subLocality ?: "" // 읍/면/동 보정
+                            val thoroughfare = address.thoroughfare ?: "" // 읍/면/동 (예: 신촌동)
+
+                            buildString {
+                                if (admin.isNotEmpty()) append(admin).append(" ")
+                                if (locality.isNotEmpty()) append(locality).append(" ")
+                                else if (subLocality.isNotEmpty()) append(subLocality).append(" ")
+                                if (thoroughfare.isNotEmpty()) append(thoroughfare)
+                            }.trim()
+                        } else {
+                            "위도 ${String.format("%.4f", latitude)}, 경도 ${String.format("%.4f", longitude)}"
+                        }
+                    } catch (e: Exception) {
+                        "위도 ${String.format("%.4f", latitude)}, 경도 ${String.format("%.4f", longitude)}"
+                    }
+                }
+
                 val recommendationList = getRecommendedMountainsUseCase(latitude, longitude)
-                _uiState.value = RecommendUiState.Success(recommendationList)
+                _uiState.value = RecommendUiState.Success(
+                    mountains = recommendationList,
+                    addressName = addressName
+                )
             } catch (e: Exception) {
                 _uiState.value = RecommendUiState.Error("서버/데이터 조회 오류가 발생했습니다: ${e.localizedMessage}")
             }
@@ -84,7 +117,10 @@ class MountainRecommendViewModel(
  */
 sealed interface RecommendUiState {
     data object Loading : RecommendUiState
-    data class Success(val mountains: List<Mountain>) : RecommendUiState
+    data class Success(
+        val mountains: List<Mountain>,
+        val addressName: String
+    ) : RecommendUiState
     data class Error(val message: String) : RecommendUiState
     data object PermissionRequired : RecommendUiState
 }

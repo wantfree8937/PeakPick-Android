@@ -101,6 +101,7 @@ fun RecommendScreen(
             is RecommendUiState.Success -> {
                 MountainListContent(
                     mountains = state.mountains,
+                    addressName = state.addressName,
                     onRefresh = { viewModel.fetchLocationAndRecommend(context) }
                 )
             }
@@ -154,6 +155,7 @@ fun RecommendScreen(
 @Composable
 fun MountainListContent(
     mountains: List<Mountain>,
+    addressName: String,
     onRefresh: () -> Unit
 ) {
     Column(modifier = Modifier.fillMaxSize()) {
@@ -171,9 +173,9 @@ fun MountainListContent(
                     )
                 )
                 Text(
-                    text = "GPS 기반 가장 가까운 등산지 정보",
+                    text = "내 위치: $addressName",
                     style = MaterialTheme.typography.bodySmall.copy(
-                        color = Color.White.copy(alpha = 0.5f)
+                        color = Color.White.copy(alpha = 0.6f)
                     )
                 )
             }

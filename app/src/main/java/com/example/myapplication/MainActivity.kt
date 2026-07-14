@@ -9,10 +9,13 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
 import androidx.compose.ui.Modifier
-import com.example.myapplication.presentation.ui.RecommendScreen
+import com.example.myapplication.presentation.ui.MapScreen
 import com.example.myapplication.presentation.ui.theme.MyApplicationTheme
+import com.example.myapplication.presentation.viewmodel.MountainRecommendViewModel
 
 class MainActivity : ComponentActivity() {
+    private val viewModel = MountainRecommendViewModel()
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
@@ -20,7 +23,7 @@ class MainActivity : ComponentActivity() {
             MyApplicationTheme {
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
                     Box(modifier = Modifier.padding(innerPadding)) {
-                        RecommendScreen()
+                        MapScreen(viewModel = viewModel)
                     }
                 }
             }

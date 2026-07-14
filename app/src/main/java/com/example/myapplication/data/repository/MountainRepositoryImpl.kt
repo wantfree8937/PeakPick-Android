@@ -19,7 +19,7 @@ class MountainRepositoryImpl(
      * 거리를 계산하고 산의 스펙(난이도, 소요시간 등)을 동적으로 변환 주입하여 반환합니다.
      */
     override suspend fun getMountains(latitude: Double, longitude: Double): List<Mountain> {
-        return try {
+        val resultList = try {
             val response = remoteDataSource.getNearbyMountains(
                 latitude = latitude,
                 longitude = longitude,
@@ -35,7 +35,7 @@ class MountainRepositoryImpl(
                     val ele = eleString?.replace(Regex("[^0-9]"), "")?.toIntOrNull() ?: 150 // 기본 해발 150m로 처리
 
                     // 하버사인 공식으로 거리 측정
-                    val dist = calculateDistance(latitude, longitude, element.lat, element.lon)
+                    val dist = calculateDistance(latitude, longitude, element.actualLat, element.actualLon)
                     val roundedDist = (dist * 10).roundToInt() / 10.0
 
                     // 고도 높이에 비례한 산 난이도 스펙 동적 설정
@@ -51,9 +51,9 @@ class MountainRepositoryImpl(
                     Mountain(
                         id = element.id.toString(),
                         name = name,
-                        address = "실시간 위치 인근 등산 코스(좌표: ${String.format("%.4f", element.lat)}, ${String.format("%.4f", element.lon)})",
-                        latitude = element.lat,
-                        longitude = element.lon,
+                        address = "실시간 위치 인근 등산 코스(좌표: ${String.format("%.4f", element.actualLat)}, ${String.format("%.4f", element.actualLon)})",
+                        latitude = element.actualLat,
+                        longitude = element.actualLon,
                         elevation = ele,
                         difficulty = difficulty,
                         estimatedTimeMinutes = time,
@@ -62,7 +62,58 @@ class MountainRepositoryImpl(
                     )
                 }
         } catch (e: Exception) {
-            emptyList() // 통신 실패 시 빈 목록 폴백 처리
+            emptyList() // 통신 실패 시 빈 목록 폴백 준비
+        }
+
+        // 만약 실시간 API 응답이 없거나 통신 에러가 난 경우 예비용 로컬 웰클래스 동산 데이터로 복구 반환합니다.
+        return if (resultList.isEmpty()) {
+            getFallbackLocalMountains(latitude, longitude)
+        } else {
+            resultList
+        }
+    }
+
+    /**
+     * API 통신이 지연되거나 제한적인 상황일 때 활용할 근거리 생활지 중심의 15개 백업 코스 데이터셋입니다.
+     */
+    private fun getFallbackLocalMountains(latitude: Double, longitude: Double): List<Mountain> {
+        val fallbacks = listOf(
+            Triple("북한산", 37.6618, 126.9934) to (836 to MountainDifficulty.HARD),
+            Triple("남산", 37.5512, 126.9882) to (262 to MountainDifficulty.EASY),
+            Triple("관악산", 37.4442, 126.9639) to (629 to MountainDifficulty.HARD),
+            Triple("도봉산", 37.7001, 127.0298) to (740 to MountainDifficulty.HARD),
+            Triple("아차산", 37.5516, 127.1009) to (295 to MountainDifficulty.EASY),
+            Triple("서대문 안산", 37.5772, 126.9538) to (295 to MountainDifficulty.EASY),
+            Triple("우면산", 37.4716, 127.0125) to (293 to MountainDifficulty.EASY),
+            Triple("대모산", 37.4811, 127.0658) to (293 to MountainDifficulty.EASY),
+            Triple("용마산", 37.5736, 127.0872) to (348 to MountainDifficulty.EASY),
+            Triple("백련산", 37.5925, 126.9278) to (215 to MountainDifficulty.EASY),
+            Triple("봉제산", 37.5398, 126.8465) to (117 to MountainDifficulty.EASY),
+            Triple("서달산", 37.4996, 126.9612) to (179 to MountainDifficulty.EASY),
+            Triple("배봉산", 37.5768, 127.0601) to (108 to MountainDifficulty.EASY),
+            Triple("개운산", 37.5947, 127.0270) to (134 to MountainDifficulty.EASY),
+            Triple("우장산", 37.5539, 126.8407) to (98 to MountainDifficulty.EASY)
+        )
+
+        return fallbacks.map { (info, spec) ->
+            val (name, lat, lon) = info
+            val (ele, diff) = spec
+            val dist = calculateDistance(latitude, longitude, lat, lon)
+            val roundedDist = (dist * 10).roundToInt() / 10.0
+            val time = (ele / 2).coerceAtLeast(30)
+
+            Mountain(
+                id = "local_${name.hashCode()}",
+                name = name,
+                address = "백업 로컬 위치 정보 (좌표: ${String.format("%.4f", lat)}, ${String.format("%.4f", lon)})",
+                latitude = lat,
+                longitude = lon,
+                elevation = ele,
+                difficulty = diff,
+                estimatedTimeMinutes = time,
+                description = "${name}은(는) 가벼운 산책과 경량을 지원하는 도심지 백업 등산 코스입니다.",
+                distanceKm = roundedDist
+            )
         }
     }
 
