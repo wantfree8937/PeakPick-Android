@@ -17,7 +17,6 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -26,21 +25,21 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.viewinterop.AndroidView
 import com.example.myapplication.domain.model.Mountain
 import com.example.myapplication.domain.model.MountainDifficulty
 import com.example.myapplication.presentation.viewmodel.MountainRecommendViewModel
 import com.example.myapplication.presentation.viewmodel.RecommendUiState
-import org.osmdroid.config.Configuration
-import org.osmdroid.tileprovider.tilesource.TileSourceFactory
-import org.osmdroid.util.GeoPoint
-import org.osmdroid.views.MapView
-import org.osmdroid.views.overlay.Marker
+import com.google.android.gms.maps.CameraUpdateFactory
+import com.google.android.gms.maps.model.BitmapDescriptorFactory
+import com.google.android.gms.maps.model.CameraPosition
+import com.google.android.gms.maps.model.LatLng
+import com.google.maps.android.compose.*
+import kotlinx.coroutines.launch
 
 /**
  * 지도를 메인 화면으로 전면 활용하여 GPS 실시간 본인 위치 노출 및
- * 주변 30km 반경의 큰 산/작은 산들을 핀(마커)으로 렌더링하고,
- * 하단 카드로 상세 정보를 연동하여 포커싱 및 스위칭하는 메인 화면 컴포저블입니다.
+ * 주변 30km 반경의 큰 산/작은 산들을 구글 맵스 마커 핀으로 렌더링하고,
+ * 하단 카드로 상세 정보를 연동하여 포커싱 및 스위칭하는 메인 화면 컴포저블입니다. (Google Maps Compose 버전)
  */
 @Composable
 fun MapScreen(
@@ -49,9 +48,8 @@ fun MapScreen(
     val context = LocalContext.current
     val uiState by viewModel.uiState.collectAsState()
 
-    // OSM 지도 동작을 보증하기 위해 유저 에이전트 환경 설정을 마킹합니다.
+    // 화면 시작 시 사용자 GPS 수집 초기 기동
     LaunchedEffect(Unit) {
-        Configuration.getInstance().userAgentValue = context.packageName
         viewModel.fetchLocationAndRecommend(context)
     }
 
@@ -176,7 +174,7 @@ fun MapScreen(
 }
 
 /**
- * 실시간 OSM MapView와 Compose의 클릭 마커 결합 콘텐츠입니다.
+ * 실시간 Google Maps 구성 및 Compose 클릭 마커 결합 콘텐츠입니다.
  */
 @Composable
 fun MapContent(
@@ -184,69 +182,75 @@ fun MapContent(
     addressName: String,
     onRefresh: () -> Unit
 ) {
-    val context = LocalContext.current
     var selectedMountain by remember { mutableStateOf<Mountain?>(null) }
-    
-    // GPS 중심 좌표 추출을 위해 리스트의 중심 혹은 전형적인 기본 한강 좌표
+    val scope = rememberCoroutineScope()
+
+    // GPS 중심 좌표 추출
     val centerLat = if (mountains.isNotEmpty()) mountains[0].latitude else 37.5665
     val centerLon = if (mountains.isNotEmpty()) mountains[0].longitude else 126.9780
 
-    // MapView 뷰 인스턴스를 Composable 팩토리 스코프에 보관합니다.
-    val mapView = remember {
-        MapView(context).apply {
-            setTileSource(TileSourceFactory.MAPNIK)
-            setMultiTouchControls(true)
-            zoomController.setVisibility(org.osmdroid.views.CustomZoomButtonsController.Visibility.NEVER)
-            controller.setZoom(13.5)
-        }
+    // Google Maps Compose 카메라 관리 상태
+    val cameraPositionState = rememberCameraPositionState {
+        position = CameraPosition.fromLatLngZoom(LatLng(centerLat, centerLon), 13f)
     }
 
-    // 맵 좌표 오토포커스
+    // 위치 갱신/로딩 성공 시 해당 중심 위치로 부드럽게 오토포커스
     LaunchedEffect(centerLat, centerLon) {
-        mapView.controller.animateTo(GeoPoint(centerLat, centerLon))
-    }
-
-    // 산 마커 및 내 위치 마커를 Overlay에 추가합니다.
-    LaunchedEffect(mountains) {
-        mapView.overlays.clear()
-
-        // 1) 내 중심 위치 표시 마커
-        val selfMarker = Marker(mapView).apply {
-            position = GeoPoint(centerLat, centerLon)
-            setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
-            title = "내 현재 위치"
-            snippet = addressName
-            // 기본 내장 마커가 아닌 파란 점 느낌의 아이콘 배정
-            icon = context.getDrawable(android.R.drawable.presence_online)
-        }
-        mapView.overlays.add(selfMarker)
-
-        // 2) 주변의 산 마커 파크
-        mountains.forEach { mountain ->
-            val mMarker = Marker(mapView).apply {
-                position = GeoPoint(mountain.latitude, mountain.longitude)
-                setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
-                title = mountain.name
-                snippet = "${mountain.elevation}m | ${mountain.distanceKm}km"
-                icon = context.getDrawable(android.R.drawable.star_big_on)
-                
-                setOnMarkerClickListener { _, _ ->
-                    selectedMountain = mountain
-                    mapView.controller.animateTo(GeoPoint(mountain.latitude, mountain.longitude))
-                    true
-                }
-            }
-            mapView.overlays.add(mMarker)
-        }
-        mapView.invalidate()
+        cameraPositionState.animate(
+            update = CameraUpdateFactory.newLatLngZoom(LatLng(centerLat, centerLon), 13f),
+            durationMs = 1000
+        )
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
-        // 안드로이드 네이티브 OSM 지도를 Compose 뷰포트에 이식
-        AndroidView(
-            factory = { mapView },
-            modifier = Modifier.fillMaxSize()
-        )
+        // 구글 맵스 Compose 컴포넌트 렌더링
+        GoogleMap(
+            modifier = Modifier.fillMaxSize(),
+            cameraPositionState = cameraPositionState,
+            uiSettings = MapUiSettings(
+                zoomControlsEnabled = false,
+                myLocationButtonEnabled = false
+            ),
+            properties = MapProperties(
+                isBuildingEnabled = true
+            )
+        ) {
+            // 1) 내 중심 위치 표시 마커 (하늘색 특수 마커)
+            Marker(
+                state = MarkerState(position = LatLng(centerLat, centerLon)),
+                title = "내 현재 위치",
+                snippet = addressName,
+                icon = BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_AZURE)
+            )
+
+            // 2) 주변의 산 마커 표시
+            mountains.forEach { mountain ->
+                val isSelected = selectedMountain?.id == mountain.id
+                Marker(
+                    state = MarkerState(position = LatLng(mountain.latitude, mountain.longitude)),
+                    title = mountain.name,
+                    snippet = "${mountain.elevation}m | ${mountain.distanceKm}km",
+                    icon = if (isSelected) {
+                        BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_ORANGE)
+                    } else {
+                        BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_RED)
+                    },
+                    onClick = {
+                        selectedMountain = mountain
+                        scope.launch {
+                            cameraPositionState.animate(
+                                update = CameraUpdateFactory.newLatLngZoom(
+                                    LatLng(mountain.latitude, mountain.longitude),
+                                    14f
+                                ),
+                                durationMs = 800
+                            )
+                        }
+                        true
+                    }
+                )
+            }
+        }
 
         // 가독성 유지를 위한 투명 그라데이션 커버 상하단 배치
         Box(
@@ -273,7 +277,7 @@ fun MapContent(
                 .align(Alignment.BottomCenter)
         )
 
-        // 1) 상단 헤더: 깔끈 지명 노출 바
+        // 1) 상단 헤더: 깔끔 지명 노출 바
         Card(
             modifier = Modifier
                 .align(Alignment.TopCenter)
@@ -291,7 +295,7 @@ fun MapContent(
             ) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "내 동네 주변 산 탐색 🗺️",
+                        text = "내 동네 주변 산 탐색 (Google Map) 🗺️",
                         style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                         color = Color.White
                     )
@@ -342,7 +346,15 @@ fun MapContent(
                         isSelected = selectedMountain?.id == mountain.id,
                         onClick = {
                             selectedMountain = mountain
-                            mapView.controller.animateTo(GeoPoint(mountain.latitude, mountain.longitude))
+                            scope.launch {
+                                cameraPositionState.animate(
+                                    update = CameraUpdateFactory.newLatLngZoom(
+                                        LatLng(mountain.latitude, mountain.longitude),
+                                        14f
+                                    ),
+                                    durationMs = 800
+                                )
+                            }
                         }
                     )
                 }
