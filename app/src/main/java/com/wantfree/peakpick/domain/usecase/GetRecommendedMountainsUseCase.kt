@@ -1,7 +1,7 @@
-package com.example.myapplication.domain.usecase
+﻿package com.wantfree.peakpick.domain.usecase
 
-import com.example.myapplication.domain.model.Mountain
-import com.example.myapplication.domain.repository.MountainRepository
+import com.wantfree.peakpick.domain.model.Mountain
+import com.wantfree.peakpick.domain.repository.MountainRepository
 
 /**
  * 사용자의 현재 GPS 위치를 기준으로 주변 산 목록 중

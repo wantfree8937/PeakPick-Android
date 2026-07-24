@@ -1,6 +1,8 @@
-package com.example.myapplication.presentation.ui
+﻿package com.wantfree.peakpick.presentation.ui
 
 import android.content.Context
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -25,10 +27,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.myapplication.domain.model.Mountain
-import com.example.myapplication.domain.model.MountainDifficulty
-import com.example.myapplication.presentation.viewmodel.MountainRecommendViewModel
-import com.example.myapplication.presentation.viewmodel.RecommendUiState
+import com.wantfree.peakpick.domain.model.Mountain
+import com.wantfree.peakpick.domain.model.MountainDifficulty
+import com.wantfree.peakpick.presentation.viewmodel.MountainRecommendViewModel
+import com.wantfree.peakpick.presentation.viewmodel.RecommendUiState
 import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.model.BitmapDescriptorFactory
 import com.google.android.gms.maps.model.CameraPosition
@@ -48,9 +50,42 @@ fun MapScreen(
     val context = LocalContext.current
     val uiState by viewModel.uiState.collectAsState()
 
-    // 화면 시작 시 사용자 GPS 수집 초기 기동
+    // 위치 조회를 위한 동적 다중 권한 요청 시스템 런처
+    val locationPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissions ->
+        val fineGranted = permissions[android.Manifest.permission.ACCESS_FINE_LOCATION] ?: false
+        val coarseGranted = permissions[android.Manifest.permission.ACCESS_COARSE_LOCATION] ?: false
+        if (fineGranted || coarseGranted) {
+            // 권한 획득 성공 시 GPS 기반 단발 추천 개시
+            viewModel.fetchLocationAndRecommend(context)
+        } else {
+            // 권한 거부 시 안전한 유도 뷰로 안내
+            viewModel.onPermissionDenied()
+        }
+    }
+
+    // 화면 시작 시 기기 내 권한이 유효한지 검사한 후, 미획득 시 시스템 팝업을 동적으로 유도 구동합니다.
     LaunchedEffect(Unit) {
-        viewModel.fetchLocationAndRecommend(context)
+        val fineGranted = androidx.core.content.ContextCompat.checkSelfPermission(
+            context,
+            android.Manifest.permission.ACCESS_FINE_LOCATION
+        ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+        val coarseGranted = androidx.core.content.ContextCompat.checkSelfPermission(
+            context,
+            android.Manifest.permission.ACCESS_COARSE_LOCATION
+        ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+
+        if (fineGranted || coarseGranted) {
+            viewModel.fetchLocationAndRecommend(context)
+        } else {
+            locationPermissionLauncher.launch(
+                arrayOf(
+                    android.Manifest.permission.ACCESS_FINE_LOCATION,
+                    android.Manifest.permission.ACCESS_COARSE_LOCATION
+                )
+            )
+        }
     }
 
     // 어두운 그라데이션 우아무드 배경을 기조로 배치합니다.
@@ -122,7 +157,27 @@ fun MapScreen(
                         )
                         Spacer(modifier = Modifier.height(16.dp))
                         Button(
-                            onClick = { viewModel.fetchLocationAndRecommend(context) },
+                            onClick = {
+                                val fineGranted = androidx.core.content.ContextCompat.checkSelfPermission(
+                                    context,
+                                    android.Manifest.permission.ACCESS_FINE_LOCATION
+                                ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+                                val coarseGranted = androidx.core.content.ContextCompat.checkSelfPermission(
+                                    context,
+                                    android.Manifest.permission.ACCESS_COARSE_LOCATION
+                                ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+
+                                if (fineGranted || coarseGranted) {
+                                    viewModel.fetchLocationAndRecommend(context)
+                                } else {
+                                    locationPermissionLauncher.launch(
+                                        arrayOf(
+                                            android.Manifest.permission.ACCESS_FINE_LOCATION,
+                                            android.Manifest.permission.ACCESS_COARSE_LOCATION
+                                        )
+                                    )
+                                }
+                            },
                             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00FFCC))
                         ) {
                             Text("다시 시도", color = Color(0xFF0F2027))
@@ -160,7 +215,14 @@ fun MapScreen(
                             )
                             Spacer(modifier = Modifier.height(24.dp))
                             Button(
-                                onClick = { viewModel.fetchLocationAndRecommend(context) },
+                                onClick = {
+                                    locationPermissionLauncher.launch(
+                                        arrayOf(
+                                            android.Manifest.permission.ACCESS_FINE_LOCATION,
+                                            android.Manifest.permission.ACCESS_COARSE_LOCATION
+                                        )
+                                    )
+                                },
                                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00FFCC))
                             ) {
                                 Text("위치 권한 허용", color = Color(0xFF0F2027))

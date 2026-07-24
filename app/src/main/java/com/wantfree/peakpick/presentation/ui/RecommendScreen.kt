@@ -1,4 +1,4 @@
-package com.example.myapplication.presentation.ui
+﻿package com.wantfree.peakpick.presentation.ui
 
 import android.Manifest
 import android.content.Context
@@ -25,10 +25,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.myapplication.domain.model.Mountain
-import com.example.myapplication.domain.model.MountainDifficulty
-import com.example.myapplication.presentation.viewmodel.MountainRecommendViewModel
-import com.example.myapplication.presentation.viewmodel.RecommendUiState
+import com.wantfree.peakpick.domain.model.Mountain
+import com.wantfree.peakpick.domain.model.MountainDifficulty
+import com.wantfree.peakpick.presentation.viewmodel.MountainRecommendViewModel
+import com.wantfree.peakpick.presentation.viewmodel.RecommendUiState
 import androidx.core.content.ContextCompat
 import android.content.pm.PackageManager
 

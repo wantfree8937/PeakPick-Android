@@ -1,4 +1,4 @@
-package com.example.myapplication.presentation.viewmodel
+﻿package com.wantfree.peakpick.presentation.viewmodel
 
 import android.annotation.SuppressLint
 import android.content.Context
@@ -6,10 +6,10 @@ import android.location.Geocoder
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.android.gms.location.LocationServices
-import com.example.myapplication.data.repository.MountainRepositoryImpl
-import com.example.myapplication.data.source.remote.OverpassRemoteDataSource
-import com.example.myapplication.domain.model.Mountain
-import com.example.myapplication.domain.usecase.GetRecommendedMountainsUseCase
+import com.wantfree.peakpick.data.repository.MountainRepositoryImpl
+import com.wantfree.peakpick.data.source.remote.OverpassRemoteDataSource
+import com.wantfree.peakpick.domain.model.Mountain
+import com.wantfree.peakpick.domain.usecase.GetRecommendedMountainsUseCase
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -43,6 +43,20 @@ class MountainRecommendViewModel(
      */
     @SuppressLint("MissingPermission")
     fun fetchLocationAndRecommend(context: Context) {
+        // 권한이 활성되어 있는지 체크하여 결핍 시 위치 탐색을 차단하고 401/SecurityException 크래시를 우회합니다.
+        if (androidx.core.content.ContextCompat.checkSelfPermission(
+                context,
+                android.Manifest.permission.ACCESS_FINE_LOCATION
+            ) != android.content.pm.PackageManager.PERMISSION_GRANTED &&
+            androidx.core.content.ContextCompat.checkSelfPermission(
+                context,
+                android.Manifest.permission.ACCESS_COARSE_LOCATION
+            ) != android.content.pm.PackageManager.PERMISSION_GRANTED
+        ) {
+            onPermissionDenied()
+            return
+        }
+
         _uiState.value = RecommendUiState.Loading
         
         val fusedLocationClient = LocationServices.getFusedLocationProviderClient(context)

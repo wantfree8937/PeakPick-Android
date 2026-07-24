@@ -1,4 +1,4 @@
-package com.example.myapplication.domain.model
+﻿package com.wantfree.peakpick.domain.model
 
 /**
  * 추천 대상인 산 정보를 담는 도메인 엔티티 클래스입니다.

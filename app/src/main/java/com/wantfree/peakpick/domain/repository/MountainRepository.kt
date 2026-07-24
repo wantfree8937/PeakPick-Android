@@ -1,6 +1,6 @@
-package com.example.myapplication.domain.repository
+﻿package com.wantfree.peakpick.domain.repository
 
-import com.example.myapplication.domain.model.Mountain
+import com.wantfree.peakpick.domain.model.Mountain
 
 /**
  * 산 데이터와 관련된 비즈니스 데이터 처리를 선언하는 Repository 인터페이스입니다.

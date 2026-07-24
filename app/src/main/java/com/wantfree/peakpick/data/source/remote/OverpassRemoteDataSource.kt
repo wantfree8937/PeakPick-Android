@@ -1,4 +1,4 @@
-package com.example.myapplication.data.source.remote
+﻿package com.wantfree.peakpick.data.source.remote
 
 import com.google.gson.annotations.SerializedName
 import retrofit2.Retrofit
